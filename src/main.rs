@@ -1,9 +1,8 @@
-
 use std::net::TcpListener;
 use std::thread::spawn;
 use tungstenite::{accept, Message};
 
-
+use serde_json::{Value};
 
 fn main() {
     let event_response = r#"
@@ -32,7 +31,7 @@ fn main() {
 	  }"
 	]"#;
 
-    let server = TcpListener::bind("127.0.0.1:9001").unwrap();
+    let server = TcpListener::bind("127.0.0.1:8080").unwrap();
     for stream in server.incoming() {
         spawn(move || {
             let mut websocket = accept(stream.unwrap()).unwrap();
@@ -41,23 +40,25 @@ fn main() {
 
                 // We do not want to send back ping/pong messages.
                 if msg.is_binary() || msg.is_text() {
-                    // let msg = Message::from("adasdasd");
 
-                    let recv: Vec<String> = serde_json::from_str(&*msg.to_string()).unwrap();
-                    match recv.first() {
-                        Some(st) => {
-                            if *st == String::from("EVENT") {
-                                websocket.send(Message::from(event_response)).unwrap();
-                            } else if *st == String::from("QUERY") {
-                                websocket.send(Message::from(query_response)).unwrap();
-                            } else if *st == String::from("QUERY_SID") {
-                                websocket.send(Message::from(query_sids_response)).unwrap();
-                            }
-                        }
-                        None => websocket.send(Message::from("Error")).unwrap(),
-                    };
+                    let parsed: Value = read_json(&*msg.to_string());
+                    println!("{}", parsed[0]);
+                    let st = parsed[0].to_string();
+
+                    if *st == String::from("EVENT") {
+                        websocket.send(Message::from(event_response)).unwrap();
+                    } else if *st == String::from("QUERY") {
+                        websocket.send(Message::from(query_response)).unwrap();
+                    } else if *st == String::from("QUERY_SID") {
+                        websocket.send(Message::from(query_sids_response)).unwrap();
+                    }
                 }
             }
         });
     }
+}
+
+fn read_json(raw_json: &str) -> Value {
+    let parsed: Value = serde_json::from_str(raw_json).unwrap();
+    return parsed;
 }
