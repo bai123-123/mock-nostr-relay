@@ -40,17 +40,17 @@ fn main() {
 
                 // We do not want to send back ping/pong messages.
                 if msg.is_binary() || msg.is_text() {
-
                     let parsed: Value = read_json(&*msg.to_string());
-                    println!("{}", parsed[0]);
+
                     let st = parsed[0].to_string();
 
-                    if *st == String::from("EVENT") {
-                        websocket.send(Message::from(event_response)).unwrap();
-                    } else if *st == String::from("QUERY") {
-                        websocket.send(Message::from(query_response)).unwrap();
-                    } else if *st == String::from("QUERY_SID") {
-                        websocket.send(Message::from(query_sids_response)).unwrap();
+                    match &st as &str {
+                        "\"EVENT\"" => {
+                            websocket.send(Message::from(event_response)).unwrap()
+                        },
+                        "\"QUERY\"" => { websocket.send(Message::from(query_response)).unwrap() },
+                        "\"QUERY_SID\"" => { websocket.send(Message::from(query_sids_response)).unwrap() },
+                        _ =>{websocket.send(Message::from("ERROR")).unwrap()}
                     }
                 }
             }
