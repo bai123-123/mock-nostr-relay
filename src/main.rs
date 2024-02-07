@@ -13,22 +13,25 @@ fn main() {
 	  ""
 	]"#;
 
-    let query_response = r#"["QUERY", "082155c14942cbe52fcc188711cdce699c812da4532d55af34cc557ae6728b98",1707200292,1,2, {"Option 1": 1,"Option 2": 2,"Option 3": 3}]"#;
+    let query_response = r#"["QUERY", "082155c14942cbe52fcc188711cdce699c812da4532d55af34cc557ae6728b98","I am title","info info info", 1707200292,1,2, {"Option 1": 1,"Option 2": 2,"Option 3": 3}]"#;
 
     let query_sids_response = r#"
     [
-	  "082155c14942cbe52fcc188711cdce699c812da4532d55af34cc557ae6728b98":"{
+	  {
+	  "id": "082155c14942cbe52fcc188711cdce699c812da4532d55af34cc557ae6728b98",
 	  "title": "I am title",
 	  "info": "info info info"
-	  }",
-	    "082155c14942cbe52fcc188711cdce699c812da4532d55af34cc557ae6728b98":"{
+	  },
+	 {
+	  "id": "082155c14942cbe52fcc188711cdce699c812da4532d55af34cc557ae6728b98",
 	  "title": "I am title",
 	  "info": "info info info"
-	  }",
-	  "082155c14942cbe52fcc188711cdce699c812da4532d55af34cc557ae6728b98":"{
+	  },
+	  {
+	  "id": "082155c14942cbe52fcc188711cdce699c812da4532d55af34cc557ae6728b98",
 	  "title": "I am title",
 	  "info": "info info info"
-	  }"
+	  }
 	]"#;
 
     let server = TcpListener::bind("127.0.0.1:8080").unwrap();
