@@ -109,7 +109,8 @@ fn main() {
                 if msg.is_binary() || msg.is_text() {
                     let parsed: Value = read_json(&*msg.to_string());
 
-                    let st = parsed["method"].to_string();
+                    let mut st = parsed["method"].to_string();
+
 
                     println!("{}", st);
 
@@ -132,6 +133,7 @@ fn main() {
 
                         }
                         "\"account_pullMessage\"" => { websocket.send(Message::from(account_pullMessage_response)).unwrap() }
+                        "\"ping\"" => { websocket.send(Message::from(r#"{result:"pong"}"#)).unwrap() }
 
 
                         _ => { websocket.send(Message::from("ERROR")).unwrap() }
