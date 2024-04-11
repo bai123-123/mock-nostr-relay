@@ -133,7 +133,7 @@ fn main() {
 
                         }
                         "\"account_pullMessage\"" => { websocket.send(Message::from(account_pullMessage_response)).unwrap() }
-                        "\"ping\"" => { websocket.send(Message::from(r#"{result:"pong"}"#)).unwrap() }
+                        "\"ping\"" => { websocket.send(Message::from("pong")).unwrap() }
 
 
                         _ => { websocket.send(Message::from("ERROR")).unwrap() }
