@@ -154,6 +154,23 @@ fn main() {
         pub result: AccountReceiveMessageRes,
     }
 
+
+
+    #[derive(Clone, Debug, Serialize, Deserialize)]
+    pub struct PullMessageResult {
+        pub status: String,
+        pub message: String,
+        pub total: u64,
+        pub list: [ReceiveMessage;2]
+    }
+
+    #[derive(Clone, Debug, Serialize, Deserialize)]
+    pub struct PullMessageResponse {
+        pub id: String,
+        pub jsonrpc: String,
+        pub result: PullMessageResult,
+    }
+
     let server = TcpListener::bind("127.0.0.1:8080").unwrap();
 
     for stream in server.incoming() {
@@ -255,7 +272,37 @@ fn main() {
 
 
                         }
-                        "\"account_pullMessage\"" => { websocket.send(Message::from(account_pullMessage_response)).unwrap() }
+                        "\"account_pullMessage\"" => {
+
+                            let resMessage = ReceiveMessage{
+                                from: "fake".to_string(),
+                                to: "fake".to_string(),
+                                message: "fake".to_string(),
+                                sign: "fake".to_string(),
+                            };
+                            let resMessage2 = ReceiveMessage{
+                                from: "fake".to_string(),
+                                to: "fake".to_string(),
+                                message: "fake".to_string(),
+                                sign: "fake".to_string(),
+                            };
+
+                            let response = PullMessageResponse{
+                                id: parsed["id"].to_string(),
+                                jsonrpc: "2.0".to_string(),
+                                result: PullMessageResult{
+                                    status: "success".to_string(),
+                                    message: "".to_string(),
+                                    total: 2,
+                                    list: [resMessage,resMessage2],
+                                },
+                            };
+
+
+
+
+                            websocket.send(Message::from(account_pullMessage_response)).unwrap()
+                        }
                         "\"ping\"" => { websocket.send(Message::from("pong")).unwrap() }
 
                         _ => { websocket.send(Message::from("ERROR")).unwrap() }
