@@ -5,92 +5,10 @@ use tungstenite::{accept, Message};
 use serde_json::{Value};
 use serde::{Deserialize, Serialize};
 use std::string::String;
+use std::sync::mpsc;
+use std::thread;
 
 fn main() {
-    let bootstrap_getNode_response = r#"
-    {
-        "jsonrpc": "2.0",
-        "result": [
-            {
-                "url": "wss://google.com",
-                "name": "Google"
-            },
-             {
-                "url": "wss://aws.com",
-                "name": "AWS"
-            }
-        ],
-        "id": 949
-    }
-    "#;
-
-    let node_connectNode_response = r#"
-    {
-        "jsonrpc": "2.0",
-        "result": {
-            "status": "success",
-            "message": "",
-        }
-        "id": 949
-    }
-    "#;
-
-    let account_sendMessage_response = r#"
-    {
-        "jsonrpc": "2.0",
-        "result": {
-            "status": "success",
-            "message": "",
-        }
-        "id": 949
-    }
-    "#;
-
-    let account_pullMessage_response = r#"
-   {
-        "jsonrpc": "2.0",
-        "result": {
-            "status": "success",
-            "message": "",
-            "total": "100",
-            "list": [
-            {
-                "from": "from",
-                "to": "to",
-                "message": "message",
-                "sign": "sign",
-               },
-              {
-                "from": "from",
-                "to": "to",
-                "message": "message",
-                "sign": "sign",
-               },
-            ]
-        }
-        "id": 949
-    }
-    "#;
-
-
-    let receive_response = r#"
-    {
-        "jsonrpc": "2.0",
-        "method": "account_receiveMessage",
-        "result": {
-            "status": "success",
-            "message": "",
-            "receiveMessage": {
-                        "from": "from",
-                        "to": "to",
-                        "message": "message",
-                        "sign": "sign",
-                    }
-        }
-        "id": 949
-    }
-    "#;
-
     #[derive(Clone, Debug, Serialize, Deserialize)]
     pub struct Params {
         pub from: Option<String>,
@@ -154,14 +72,12 @@ fn main() {
         pub result: AccountReceiveMessageRes,
     }
 
-
-
     #[derive(Clone, Debug, Serialize, Deserialize)]
     pub struct PullMessageResult {
         pub status: String,
         pub message: String,
         pub total: u64,
-        pub list: [ReceiveMessage;2]
+        pub list: [ReceiveMessage; 2],
     }
 
     #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -171,34 +87,42 @@ fn main() {
         pub result: PullMessageResult,
     }
 
-    let server = TcpListener::bind("127.0.0.1:8080").unwrap();
+    let server1 = TcpListener::bind("0.0.0.0:8080").unwrap();
+    let server2 = TcpListener::bind("0.0.0.0:8081").unwrap();
 
-    for stream in server.incoming() {
-        spawn(move || {
+    let (atx, brx) = mpsc::channel();
+    let (btx, arx) = mpsc::channel();
+
+
+    let handle1 = spawn(move || {
+
+        for stream in server1.incoming() {
             let mut websocket = accept(stream.unwrap()).unwrap();
             let mut current_account = "".to_string();
             loop {
                 let msg = websocket.read().unwrap();
 
+
+                if let Result::Ok(received) = arx.try_recv() {
+                    println!("收到消息：{:?}", received);
+                    println!("receive from B");
+                    websocket.send(Message::from(
+                        serde_json::to_string(&received).unwrap().as_str()
+                    )).unwrap();
+                }
                 // We do not want to send back ping/pong messages.
                 if msg.is_binary() || msg.is_text() {
                     let parsed: Value = read_json(&*msg.to_string());
-
                     let mut st = parsed["method"].to_string();
-
-
-                    println!("{}", st);
-
-
                     match &st as &str {
                         "\"bootstrap_getNode\"" => {
                             let res1 = BootstrapGetNodeResult {
-                                url: "wss://google.com".to_string(),
-                                name: "Google".to_string(),
+                                url: "ws://52.221.181.98:8080".to_string(),
+                                name: "Alice".to_string(),
                             };
                             let res2 = BootstrapGetNodeResult {
-                                url: "wss://aws.com".to_string(),
-                                name: "AWS".to_string(),
+                                url: "ws://52.221.181.98:8081".to_string(),
+                                name: "Bob".to_string(),
                             };
                             let response = BootstrapGetNodeResponse {
                                 id: parsed["id"].to_string(),
@@ -213,7 +137,7 @@ fn main() {
                         "\"node_connectNode\"" => {
                             current_account = parsed["params"]["address"].to_string();
 
-                            let response = NodeConnectNodeResponse{
+                            let response = NodeConnectNodeResponse {
                                 id: parsed["id"].to_string(),
                                 jsonrpc: "2.0".to_string(),
                                 result: NodeConnectNodeResult {
@@ -227,8 +151,118 @@ fn main() {
                             )).unwrap();
                         }
                         "\"account_sendMessage\"" => {
+                            let response = NodeConnectNodeResponse {
+                                id: parsed["id"].to_string(),
+                                jsonrpc: "2.0".to_string(),
+                                result: NodeConnectNodeResult {
+                                    status: "success".to_string(),
+                                    message: "".to_string(),
+                                },
+                            };
+                            websocket.send(Message::from(
+                                serde_json::to_string(&response).unwrap().as_str()
+                            )).unwrap();
 
-                            let response = NodeConnectNodeResponse{
+                            let response = AccountReceiveMessage {
+                                id: parsed["id"].to_string(),
+                                jsonrpc: "2.0".to_string(),
+                                method: "account_receiveMessage".to_string(),
+                                result: AccountReceiveMessageRes {
+                                    status: "success".to_string(),
+                                    message: "".to_string(),
+                                    receiveMessage: ReceiveMessage {
+                                        from: parsed["params"]["from"].to_string(),
+                                        to: parsed["params"]["to"].to_string(),
+                                        message: parsed["params"]["message"].to_string(),
+                                        sign: parsed["params"]["sign"].to_string(),
+                                    },
+                                },
+                            };
+                            println!("send to B");
+                            atx.send(response).unwrap();
+                        }
+                        "\"account_pullMessage\"" => {
+                            let resMessage = ReceiveMessage {
+                                from: "fake".to_string(),
+                                to: "fake".to_string(),
+                                message: "fake".to_string(),
+                                sign: "fake".to_string(),
+                            };
+                            let resMessage2 = ReceiveMessage {
+                                from: "fake".to_string(),
+                                to: "fake".to_string(),
+                                message: "fake".to_string(),
+                                sign: "fake".to_string(),
+                            };
+
+                            let response = PullMessageResponse {
+                                id: parsed["id"].to_string(),
+                                jsonrpc: "2.0".to_string(),
+                                result: PullMessageResult {
+                                    status: "success".to_string(),
+                                    message: "".to_string(),
+                                    total: 2,
+                                    list: [resMessage, resMessage2],
+                                },
+                            };
+
+
+                            websocket.send(Message::from(serde_json::to_string(&response).unwrap().as_str())).unwrap()
+                        }
+                        "\"ping\"" => { websocket.send(Message::from("pong")).unwrap() }
+
+                        _ => { websocket.send(Message::from("ERROR")).unwrap() }
+                    }
+                }
+            }
+        }
+    });
+
+    let handle2 = spawn(move || {
+        for stream in server2.incoming() {
+            let mut websocket = accept(stream.unwrap()).unwrap();
+            let mut current_account = "".to_string();
+
+            loop {
+                let msg = websocket.read().unwrap();
+
+
+
+                if let Result::Ok(received) = brx.try_recv() {
+                    println!("收到消息：{:?}", received);
+                    println!("receive from A");
+                    websocket.send(Message::from(
+                        serde_json::to_string(&received).unwrap().as_str()
+                    )).unwrap();
+                }
+                // We do not want to send back ping/pong messages.
+                if msg.is_binary() || msg.is_text() {
+                    let parsed: Value = read_json(&*msg.to_string());
+                    let mut st = parsed["method"].to_string();
+                    match &st as &str {
+                        "\"bootstrap_getNode\"" => {
+                            let res1 = BootstrapGetNodeResult {
+                                url: "ws://52.221.181.98:8080".to_string(),
+                                name: "Alice".to_string(),
+                            };
+                            let res2 = BootstrapGetNodeResult {
+                                url: "ws://52.221.181.98:8081".to_string(),
+                                name: "Bob".to_string(),
+                            };
+                            let response = BootstrapGetNodeResponse {
+                                id: parsed["id"].to_string(),
+                                jsonrpc: "2.0".to_string(),
+                                result: [res1, res2],
+                            };
+
+                            websocket.send(Message::from(
+                                serde_json::to_string(&response).unwrap().as_str()
+                            )).unwrap()
+                        }
+                        "\"node_connectNode\"" => {
+                            current_account = parsed["params"]["address"].to_string();
+
+                            let response = NodeConnectNodeResponse {
                                 id: parsed["id"].to_string(),
                                 jsonrpc: "2.0".to_string(),
                                 result: NodeConnectNodeResult {
@@ -237,71 +271,87 @@ fn main() {
                                 },
                             };
 
-
                             websocket.send(Message::from(
                                 serde_json::to_string(&response).unwrap().as_str()
                             )).unwrap();
-                            if current_account == (parsed["params"]["to"].to_string()) {
-
-                                let response = AccountReceiveMessage{
-                                    id: parsed["id"].to_string(),
-                                    jsonrpc: "2.0".to_string(),
-                                    method: "account_receiveMessage".to_string(),
-                                    result: AccountReceiveMessageRes{
-                                        status: "success".to_string(),
-                                        message: "".to_string(),
-                                        receiveMessage: ReceiveMessage {
-                                            from: parsed["params"]["from"].to_string(),
-                                            to: parsed["params"]["to"].to_string(),
-                                            message: parsed["params"]["message"].to_string(),
-                                            sign: parsed["params"]["sign"].to_string(),
-                                        },
-                                    },
-                                };
-
-
-
-                                websocket.send(Message::from(
-                                    serde_json::to_string(&response).unwrap().as_str()
-                                )).unwrap();
-
-
-
-                            }
-
-
-
                         }
-                        "\"account_pullMessage\"" => {
-
-                            let resMessage = ReceiveMessage{
-                                from: "fake".to_string(),
-                                to: "fake".to_string(),
-                                message: "fake".to_string(),
-                                sign: "fake".to_string(),
-                            };
-                            let resMessage2 = ReceiveMessage{
-                                from: "fake".to_string(),
-                                to: "fake".to_string(),
-                                message: "fake".to_string(),
-                                sign: "fake".to_string(),
-                            };
-
-                            let response = PullMessageResponse{
+                        "\"account_sendMessage\"" => {
+                            let response = NodeConnectNodeResponse {
                                 id: parsed["id"].to_string(),
                                 jsonrpc: "2.0".to_string(),
-                                result: PullMessageResult{
+                                result: NodeConnectNodeResult {
+                                    status: "success".to_string(),
+                                    message: "".to_string(),
+                                },
+                            };
+                            websocket.send(Message::from(
+                                serde_json::to_string(&response).unwrap().as_str()
+                            )).unwrap();
+
+                            let response = AccountReceiveMessage {
+                                id: parsed["id"].to_string(),
+                                jsonrpc: "2.0".to_string(),
+                                method: "account_receiveMessage".to_string(),
+                                result: AccountReceiveMessageRes {
+                                    status: "success".to_string(),
+                                    message: "".to_string(),
+                                    receiveMessage: ReceiveMessage {
+                                        from: parsed["params"]["from"].to_string(),
+                                        to: parsed["params"]["to"].to_string(),
+                                        message: parsed["params"]["message"].to_string(),
+                                        sign: parsed["params"]["sign"].to_string(),
+                                    },
+                                },
+                            };
+                            // if current_account == (parsed["params"]["to"].to_string()) {
+                            //     let response = AccountReceiveMessage{
+                            //         id: parsed["id"].to_string(),
+                            //         jsonrpc: "2.0".to_string(),
+                            //         method: "account_receiveMessage".to_string(),
+                            //         result: AccountReceiveMessageRes{
+                            //             status: "success".to_string(),
+                            //             message: "".to_string(),
+                            //             receiveMessage: ReceiveMessage {
+                            //                 from: parsed["params"]["from"].to_string(),
+                            //                 to: parsed["params"]["to"].to_string(),
+                            //                 message: parsed["params"]["message"].to_string(),
+                            //                 sign: parsed["params"]["sign"].to_string(),
+                            //             },
+                            //         },
+                            //     };
+                            //     websocket.send(Message::from(
+                            //         serde_json::to_string(&response).unwrap().as_str()
+                            //     )).unwrap();
+                            // }
+                            btx.send(response).unwrap()
+                        }
+                        "\"account_pullMessage\"" => {
+                            let resMessage = ReceiveMessage {
+                                from: "fake".to_string(),
+                                to: "fake".to_string(),
+                                message: "fake".to_string(),
+                                sign: "fake".to_string(),
+                            };
+                            let resMessage2 = ReceiveMessage {
+                                from: "fake".to_string(),
+                                to: "fake".to_string(),
+                                message: "fake".to_string(),
+                                sign: "fake".to_string(),
+                            };
+
+                            let response = PullMessageResponse {
+                                id: parsed["id"].to_string(),
+                                jsonrpc: "2.0".to_string(),
+                                result: PullMessageResult {
                                     status: "success".to_string(),
                                     message: "".to_string(),
                                     total: 2,
-                                    list: [resMessage,resMessage2],
+                                    list: [resMessage, resMessage2],
                                 },
                             };
 
 
-
-
-                            websocket.send(Message::from(account_pullMessage_response)).unwrap()
+                            websocket.send(Message::from(serde_json::to_string(&response).unwrap().as_str())).unwrap()
                         }
                         "\"ping\"" => { websocket.send(Message::from("pong")).unwrap() }
 
@@ -309,8 +359,11 @@ fn main() {
                     }
                 }
             }
-        });
-    }
+        }
+    });
+
+    handle1.join().unwrap();
+    handle2.join().unwrap();
 }
 
 
